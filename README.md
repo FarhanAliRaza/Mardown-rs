@@ -1,4 +1,4 @@
-# 📝 MDRS (Markdown Recursive Scanner)
+# 📝 MDRS (Markdown Rust)
 
 A fast and efficient command-line tool that recursively scans directories and creates a single markdown file containing the contents of all files. Perfect for adding folders to LLM context
 
