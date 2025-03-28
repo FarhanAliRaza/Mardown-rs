@@ -21,7 +21,7 @@ A fast and efficient command-line tool that recursively scans directories and cr
 ```bash
 # Clone the repository
 git clone git@github.com:FarhanAliRaza/Mardown-rs.git
-cd mdrs
+cd Mardown-rs
 
 # Build the project
 cargo build --release
