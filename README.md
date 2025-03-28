@@ -1,6 +1,6 @@
 # 📝 MDRS (Markdown Recursive Scanner)
 
-A fast and efficient command-line tool that recursively scans directories and creates a single markdown file containing the contents of all files. Perfect for creating documentation or sharing code snippets.
+A fast and efficient command-line tool that recursively scans directories and creates a single markdown file containing the contents of all files. Perfect for adding folders to LLM context
 
 ## ✨ Features
 
