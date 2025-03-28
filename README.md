@@ -81,12 +81,12 @@ The generated markdown file will have the following format for each file:
 
 ```markdown
 filename.py
-```
+
 [file content]
-```
+
 foldername/new.py
-```
 [file content]
+
 ```
 
 ## 🤝 Contributing
