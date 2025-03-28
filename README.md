@@ -8,7 +8,6 @@ A fast and efficient command-line tool that recursively scans directories and cr
 - 📁 Process all files or filter by specific extensions
 - 📄 Customizable output markdown file location
 - 🔍 Relative path preservation in output
-- 🎯 Skip output file to prevent recursion
 - 💪 Written in Rust for maximum performance
 
 ## 🛠️ Installation
@@ -21,7 +20,7 @@ A fast and efficient command-line tool that recursively scans directories and cr
 
 ```bash
 # Clone the repository
-git clone https://github.com/FarhanAliRaza/mdrs.git
+git clone git@github.com:FarhanAliRaza/Mardown-rs.git
 cd mdrs
 
 # Build the project
