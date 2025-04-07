@@ -18,9 +18,42 @@ struct Args {
     /// File extensions to include (comma-separated). If not specified, includes all files.
     #[arg(short, long)]
     extensions: Option<String>,
+
+    /// Files or extensions to ignore (comma-separated). Can be full filenames or extensions (e.g., "Cargo.lock,.gitignore,.env")
+    #[arg(short, long)]
+    ignore: Option<String>,
 }
 
-fn should_skip_path(path: &str) -> bool {
+fn is_hidden(entry: &DirEntry) -> bool {
+    entry
+        .file_name()
+        .to_str()
+        .map(|s| s.starts_with("."))
+        .unwrap_or(false)
+}
+
+fn is_binary_file(path: &str) -> Result<bool> {
+    let content = fs::read(path)?;
+
+    // Check for null bytes
+    if content.contains(&0) {
+        return Ok(true);
+    }
+
+    // Check for high percentage of non-printable characters
+    let non_printable_count = content
+        .iter()
+        .filter(|&&c| c < 32 && c != 9 && c != 10 && c != 13) // 9=tab, 10=LF, 13=CR
+        .count();
+
+    let total_bytes = content.len();
+    let non_printable_ratio = non_printable_count as f64 / total_bytes as f64;
+
+    // If more than 10% of bytes are non-printable, consider it binary
+    Ok(non_printable_ratio > 0.1)
+}
+
+fn should_skip_path(path: &str, ignore_patterns: &[String]) -> bool {
     let components: Vec<&str> = path.split('/').collect();
     println!("Checking path: {}", path);
 
@@ -30,6 +63,14 @@ fn should_skip_path(path: &str) -> bool {
     } else {
         &components[..]
     };
+
+    // Check if the full filename matches any ignore pattern
+    if let Some(filename) = components_to_check.last() {
+        if ignore_patterns.iter().any(|pattern| filename == pattern) {
+            println!("Skipping ignored file: {}", filename);
+            return true;
+        }
+    }
 
     for component in components_to_check {
         if component.starts_with(".") {
@@ -54,7 +95,6 @@ fn should_skip_path(path: &str) -> bool {
             ".docusaurus",
             ".cargo",
             ".rustup",
-            ".lock", //skip lock files
         ]
         .contains(&component)
         {
@@ -74,6 +114,13 @@ fn main() -> Result<()> {
         .extensions
         .as_deref()
         .map(|exts| exts.split(',').map(String::from).collect())
+        .unwrap_or_default();
+
+    // Parse ignore patterns if provided
+    let ignore_patterns: Vec<String> = args
+        .ignore
+        .as_deref()
+        .map(|patterns| patterns.split(',').map(String::from).collect())
         .unwrap_or_default();
 
     // Create output file
@@ -99,8 +146,14 @@ fn main() -> Result<()> {
         }
 
         // Check if path should be skipped
-        if should_skip_path(&path_str) {
+        if should_skip_path(&path_str, &ignore_patterns) {
             println!("Skipping file due to path rules");
+            continue;
+        }
+
+        // Check if file is binary
+        if let Ok(true) = is_binary_file(&path_str) {
+            println!("Skipping binary file: {}", path_str);
             continue;
         }
 
@@ -112,6 +165,15 @@ fn main() -> Result<()> {
                     println!("Skipping file due to extension: {}", ext_str);
                     continue;
                 }
+            }
+        }
+
+        // Check if file extension is in ignore patterns
+        if let Some(ext) = path.extension() {
+            let ext_str = format!(".{}", ext.to_string_lossy());
+            if ignore_patterns.contains(&ext_str) {
+                println!("Skipping file with ignored extension: {}", ext_str);
+                continue;
             }
         }
 

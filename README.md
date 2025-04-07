@@ -1,6 +1,6 @@
 # 📝 MDRS (Markdown Recursive Scanner)
 
-A fast and efficient command-line tool that recursively scans directories and creates a single markdown file containing the contents of all files. Perfect for adding folders to LLM context
+A fast and efficient command-line tool that recursively scans directories and creates a single markdown file containing the contents of all files. Perfect for creating documentation or sharing code snippets.
 
 ## ✨ Features
 
@@ -8,7 +8,11 @@ A fast and efficient command-line tool that recursively scans directories and cr
 - 📁 Process all files or filter by specific extensions
 - 📄 Customizable output markdown file location
 - 🔍 Relative path preservation in output
+- 🎯 Skip output file to prevent recursion
 - 💪 Written in Rust for maximum performance
+- 🚫 Skip binary files automatically
+- 🛡️ Ignore specific files or extensions
+- 📦 Skip common build and dependency directories
 
 ## 🛠️ Installation
 
@@ -61,10 +65,16 @@ Process only files with specific extensions:
 mdrs -e py,js,ts
 ```
 
-### Combine Options
-Process specific directory, with custom output and extensions:
+### Ignore Files or Extensions
+Skip specific files or extensions:
 ```bash
-mdrs /path/to/directory -o output.md -e py,js
+mdrs -i "Cargo.lock,.gitignore,.env,.lock"
+```
+
+### Combine Options
+Process specific directory, with custom output, extensions, and ignore patterns:
+```bash
+mdrs /path/to/directory -o output.md -e py,js -i ".lock,.env"
 ```
 
 ## 📋 Command Line Arguments
@@ -74,6 +84,20 @@ mdrs /path/to/directory -o output.md -e py,js
 | `input_dir` | - | - | Directory to scan | Current directory (.) |
 | `output` | `-o` | `--output` | Output markdown file path | llm.md |
 | `extensions` | `-e` | `--extensions` | Comma-separated file extensions to include | None (all files) |
+| `ignore` | `-i` | `--ignore` | Comma-separated files or extensions to ignore | None |
+
+## 🔍 File Filtering
+
+The tool automatically:
+- Skips binary files (images, executables, etc.)
+- Skips hidden files and directories (starting with `.`)
+- Skips common build and dependency directories:
+  - `target`, `build`, `dist`
+  - `node_modules`, `.git`, `.venv`
+  - `__pycache__`, `.pytest_cache`
+  - `.idea`, `.vscode`
+  - `.next`, `.nuxt`, `.docusaurus`
+  - `.cargo`, `.rustup`
 
 ## 📄 Output Format
 
