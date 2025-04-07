@@ -1,4 +1,4 @@
-# 📝 MDRS (Markdown Recursive Scanner)
+# 📝 MDRS (Markdown Rust)
 
 A fast and efficient command-line tool that recursively scans directories and creates a single markdown file containing the contents of all files. Perfect for creating documentation or sharing code snippets.
 
@@ -105,12 +105,12 @@ The generated markdown file will have the following format for each file:
 
 ```markdown
 filename.py
-```
+
 [file content]
-```
+
 foldername/new.py
-```
 [file content]
+
 ```
 
 ## 🤝 Contributing
