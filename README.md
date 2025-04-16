@@ -133,28 +133,6 @@ Once the agent is running, you can interact with it using natural language:
 - "Add error handling to the API request in network.rs"
 - "Analyze and refactor this code to improve performance"
 
-## 📦 Dependencies
-
-This project uses the following Rust libraries:
-
-### 🛠️ Core Functionality
-- `walkdir` (0.5.0): Fast directory traversal for scanning code files
-- `clap` (4.4.6): Command-line argument parsing with derive macros
-- `anyhow` (1.0.75): Flexible error handling with context
-- `reqwest` (0.11.22): HTTP client for API requests to LLM services
-- `tokio` (1.32.0): Asynchronous runtime for concurrent operations
-- `serde` (1.0.188): Serialization/deserialization framework for JSON
-- `serde_json` (1.0): JSON parsing and generation
-
-### 🧩 Additional Libraries
-- `async-trait` (0.1.73): Support for async traits in the agent interfaces
-- `chrono` (0.4.31): Date and time functionality for logging
-- `uuid` (1.4.1): Generation of unique identifiers
-- `dotenv` (0.15.0): Loading environment variables from .env files
-- `colored` (2.0.4): Terminal text coloring for better UX
-- `regex` (1.9.5): Regular expressions for pattern matching
-- `lazy_static` (1.4.0): Lazily evaluated statics for improved performance
-- `futures` (0.3.28): Utilities for working with async code
 
 ## 👨‍💻 Development
 
