@@ -12,7 +12,8 @@ use std::env;
 #[derive(Serialize, Debug)]
 struct GoogleGenerateContentRequest {
     contents: Vec<GoogleContent>,
-    // Add tools when needed
+    #[serde(skip_serializing_if = "Option::is_none")]
+    system_instruction: Option<GoogleContent>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<GoogleTool>>,
     // Add other configs later if needed
@@ -296,6 +297,7 @@ impl Model for GoogleModel {
         &self,
         conversation: &[Message],
         tools: Option<&[Tool]>,
+        system_prompt: Option<&str>,
     ) -> Result<ModelResponse, AppError> {
         // Handle tools if supported and provided
         let google_tools = if self.supports_tools() && tools.is_some() {
@@ -314,6 +316,14 @@ impl Model for GoogleModel {
         // Convert conversation to Google format
         let google_contents = Self::convert_to_google_contents(conversation);
 
+        // Convert system prompt to Google format if provided
+        let system_instruction = system_prompt.map(|prompt| GoogleContent {
+            role: None, // System instructions don't have a role in Google API
+            parts: vec![GooglePart::Text {
+                text: prompt.to_string(),
+            }],
+        });
+
         // Check if conversion resulted in empty contents
         if google_contents.is_empty() {
             return Err(AppError(
@@ -324,6 +334,7 @@ impl Model for GoogleModel {
         // Build request
         let request = GoogleGenerateContentRequest {
             contents: google_contents,
+            system_instruction,
             tools: google_tools,
         };
 

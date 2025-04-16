@@ -146,19 +146,33 @@ impl OpenAIModel {
     }
 
     /// Convert our Message format to OpenAI message format
-    fn convert_to_openai_messages(conversation: &[Message]) -> Vec<OpenAIMessage> {
+    fn convert_to_openai_messages(
+        conversation: &[Message],
+        system_prompt: Option<&str>,
+    ) -> Vec<OpenAIMessage> {
         let mut openai_messages: Vec<OpenAIMessage> = Vec::new();
 
-        // Add a default system message if not present
-        let has_system = conversation.iter().any(|msg| msg.role == "system");
-        if !has_system {
+        // Add the system prompt if provided
+        if let Some(prompt) = system_prompt {
             openai_messages.push(OpenAIMessage {
                 role: "system".to_string(),
-                content: Some("You are a helpful assistant.".to_string()), // Use Some() rather than None for requests
+                content: Some(prompt.to_string()),
                 tool_calls: None,
                 tool_call_id: None,
                 name: None,
             });
+        } else {
+            // Add a default system message if no specific prompt is given
+            let has_system = conversation.iter().any(|msg| msg.role == "system");
+            if !has_system {
+                openai_messages.push(OpenAIMessage {
+                    role: "system".to_string(),
+                    content: Some("You are a helpful assistant.".to_string()), // Use Some() rather than None for requests
+                    tool_calls: None,
+                    tool_call_id: None,
+                    name: None,
+                });
+            }
         }
 
         // Process each message
@@ -328,9 +342,10 @@ impl Model for OpenAIModel {
         &self,
         conversation: &[Message],
         tools: Option<&[Tool]>,
+        system_prompt: Option<&str>,
     ) -> Result<ModelResponse, AppError> {
-        // Convert to OpenAI format
-        let openai_messages = Self::convert_to_openai_messages(conversation);
+        // Convert to OpenAI format, passing the system prompt
+        let openai_messages = Self::convert_to_openai_messages(conversation, system_prompt);
 
         if openai_messages.is_empty() {
             return Err(AppError(
@@ -421,6 +436,6 @@ impl Model for OpenAIModel {
 // Helper function to create a default OpenAI model instance
 pub fn default_openai() -> Result<OpenAIModel, AppError> {
     // Get model name from env or use default (e.g., gpt-4o)
-    let model_name = env::var("OPENAI_MODEL_NAME").unwrap_or_else(|_| "gpt-4.1".to_string());
+    let model_name = env::var("OPENAI_MODEL_NAME").unwrap_or_else(|_| "gpt-4o".to_string());
     OpenAIModel::new(model_name)
 }

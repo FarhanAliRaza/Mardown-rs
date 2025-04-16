@@ -84,6 +84,7 @@ pub trait Model: Send + Sync {
         &self,
         conversation: &[Message],
         tools: Option<&[Tool]>,
+        system_prompt: Option<&str>,
     ) -> Result<ModelResponse, AppError>;
 
     /// Indicates if the model implementation supports tool use.

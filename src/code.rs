@@ -37,6 +37,7 @@ impl ToolDefinition {
 pub struct Agent {
     model: Box<dyn Model>,
     tools: Vec<ToolDefinition>,
+    system_prompt: String,
 }
 
 impl Agent {
@@ -50,6 +51,10 @@ impl Agent {
 
         println!("Initialized Agent with {} model.", model.name());
 
+        // Load system prompt
+        let system_prompt = fs::read_to_string("src/system_prompt.txt")
+            .map_err(|e| AppError(format!("Failed to load system prompt: {}", e)))?;
+
         Ok(Agent {
             model,
             tools: vec![
@@ -57,6 +62,7 @@ impl Agent {
                 list_files_definition(),
                 edit_file_definition(),
             ],
+            system_prompt,
         })
     }
 
@@ -222,7 +228,11 @@ impl Agent {
         };
 
         self.model
-            .run_inference(conversation, api_tools.as_deref())
+            .run_inference(
+                conversation,
+                api_tools.as_deref(),
+                Some(&self.system_prompt),
+            )
             .await
     }
 

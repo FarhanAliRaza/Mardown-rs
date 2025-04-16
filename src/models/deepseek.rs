@@ -1,6 +1,4 @@
-use super::{
-    AppError, ContentBlock, Message, Model, ModelResponse, Tool,
-};
+use super::{AppError, ContentBlock, Message, Model, ModelResponse, Tool};
 use async_trait::async_trait;
 use reqwest::{Client, header};
 use serde::{Deserialize, Serialize};
@@ -146,19 +144,33 @@ impl DeepSeekModel {
     }
 
     /// Convert our Message format to DeepSeek message format
-    fn convert_to_deepseek_messages(conversation: &[Message]) -> Vec<DeepSeekMessage> {
+    fn convert_to_deepseek_messages(
+        conversation: &[Message],
+        system_prompt: Option<&str>,
+    ) -> Vec<DeepSeekMessage> {
         let mut deepseek_messages: Vec<DeepSeekMessage> = Vec::new();
 
-        // Add a default system message if not present
-        let has_system = conversation.iter().any(|msg| msg.role == "system");
-        if !has_system {
+        // Add the system prompt if provided
+        if let Some(prompt) = system_prompt {
             deepseek_messages.push(DeepSeekMessage {
                 role: "system".to_string(),
-                content: "You are a helpful assistant.".to_string(),
+                content: prompt.to_string(),
                 tool_calls: None,
                 tool_call_id: None,
                 name: None,
             });
+        } else {
+            // Add a default system message if no specific prompt is given
+            let has_system = conversation.iter().any(|msg| msg.role == "system");
+            if !has_system {
+                deepseek_messages.push(DeepSeekMessage {
+                    role: "system".to_string(),
+                    content: "You are a helpful assistant.".to_string(),
+                    tool_calls: None,
+                    tool_call_id: None,
+                    name: None,
+                });
+            }
         }
 
         // Process each message
@@ -354,9 +366,10 @@ impl Model for DeepSeekModel {
         &self,
         conversation: &[Message],
         tools: Option<&[Tool]>,
+        system_prompt: Option<&str>,
     ) -> Result<ModelResponse, AppError> {
-        // Convert to DeepSeek format
-        let deepseek_messages = Self::convert_to_deepseek_messages(conversation);
+        // Convert to DeepSeek format, passing the system prompt
+        let deepseek_messages = Self::convert_to_deepseek_messages(conversation, system_prompt);
 
         if deepseek_messages.is_empty() {
             return Err(AppError(
