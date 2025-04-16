@@ -19,7 +19,7 @@ pub struct MdrsArgs {
     pub extensions: Option<String>,
 
     /// Comma-separated list of patterns (filenames or extensions like ".lock") to ignore.
-    #[arg(short, long)]
+    #[arg(short = 'n', long)]
     pub ignore: Option<String>,
 }
 
