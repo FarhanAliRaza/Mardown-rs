@@ -1,6 +1,6 @@
 # 🚀 pai
 
-**pai** is a fast and efficient command-line tool that recursively scans directories and creates a single markdown file containing the contents of all files. It also includes functionality for running a code generation agent using different large language models.
+**pai** is a fast and command-line tool that creates a single markdown file containing the contents of all files in a folder (for chatting to your code). It also includes functionality for running a code generation agent using different large language models (NOT SAFE ⚠️).
 
 ## ✨ Features
 
