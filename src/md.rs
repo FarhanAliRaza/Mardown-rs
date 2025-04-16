@@ -1,12 +1,25 @@
 use anyhow::{Context, Result};
+use clap::Args;
 use std::fs::{self, File};
 use std::io::Write;
-use walkdir::{DirEntry, WalkDir};
+use walkdir::WalkDir;
 
+#[derive(Args, Debug)]
 pub struct MdrsArgs {
+    /// Directory to search for code files.
+    #[arg(short, long, default_value = ".")]
     pub input_dir: String,
+
+    /// Output Markdown file path.
+    #[arg(short, long, default_value = "llm.md")]
     pub output: String,
+
+    /// Comma-separated list of file extensions to include (e.g., "rs,toml").
+    #[arg(short, long)]
     pub extensions: Option<String>,
+
+    /// Comma-separated list of patterns (filenames or extensions like ".lock") to ignore.
+    #[arg(short, long)]
     pub ignore: Option<String>,
 }
 

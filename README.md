@@ -1,178 +1,152 @@
-# 📝 MDRS (Markdown Rust)
+# pai
 
-A versatile command-line tool with dual functionality:
-1. Recursively scan directories and create a single markdown file containing the contents of all files
-2. Act as a code-editing agent powered by Claude AI to help you manage and edit your codebase
+**pai** is a fast and efficient command-line tool that recursively scans directories and creates a single markdown file containing the contents of all files. It also includes functionality for running a code generation agent using different large language models.
 
-## ✨ Features
+## Features
 
-### Markdown Generator
-- 🚀 Fast recursive directory scanning
-- 📁 Process all files or filter by specific extensions
-- 📄 Customizable output markdown file location
-- 🔍 Relative path preservation in output
-- 🎯 Skip output file to prevent recursion
-- 🚫 Skip binary files automatically
-- 🛡️ Ignore specific files or extensions
-- 📦 Skip common build and dependency directories
+- **Markdown Generation**: Generate a markdown file from code files.
+  - Fast recursive directory scanning
+  - Filter by specific extensions
+  - Customizable output file location
+  - Automatically skip binary files
+  - Ignore specific files or patterns
+- **Code Generation Agent**: Run a code generation agent using various large language models such as Claude, Google, DeepSeek, and OpenAI.
+  - Read and edit files with natural language instructions
+  - List directory contents
+  - Create new files from scratch
+  - Interactive chat interface
 
-### Code Agent
-- 🤖 Powered by Claude AI through the Anthropic API
-- 📝 Read and edit files with natural language instructions
-- 📂 List directory contents
-- 🔄 Create new files from scratch
-- 💬 Chat interface for interactive assistance
-
-## 🛠️ Installation
+## Installation
 
 ### Prerequisites
-- Rust toolchain (1.70.0 or later)
+
+- Rust toolchain (1.70.0 or later recommended)
 - Cargo (comes with Rust)
-- Anthropic API key (for code agent functionality)
+- API keys for the language models you intend to use
 
-### Building from Source
+### Installing from Source
 
-```bash
+```sh
 # Clone the repository
-git clone git@github.com:FarhanAliRaza/Mardown-rs.git
-cd Mardown-rs
+git clone <repository_url>
+cd pai
 
 # Build the project
 cargo build --release
 
-# The executable will be in target/release/mdrs
+# The executable will be in target/release/pai
 ```
 
 ### Installing via Cargo
 
-```bash
-cargo install --path . 
+```sh
+# From the project directory
+cargo install --path .
+
+# Or directly from the repository (if published)
+cargo install pai
 ```
 
-## 🚀 Usage
+## Environment Setup
 
-### Markdown Generator
+Set up the API keys for the language models you want to use:
 
-#### Basic Usage
-Process all files in the current directory:
-```bash
-mdrs
-```
-
-#### Specify Input Directory
-Process files in a specific directory:
-```bash
-mdrs /path/to/directory
-```
-
-#### Custom Output File
-Specify a custom output markdown file:
-```bash
-mdrs -o output.md
-```
-
-#### Filter by Extensions
-Process only files with specific extensions:
-```bash
-mdrs -e py,js,ts
-```
-
-#### Ignore Files or Extensions
-Skip specific files or extensions:
-```bash
-mdrs -i "Cargo.lock,.gitignore,.env,.lock"
-```
-
-#### Combine Options
-Process specific directory, with custom output, extensions, and ignore patterns:
-```bash
-mdrs /path/to/directory -o output.md -e py,js -i ".lock,.env"
-```
-
-### Code Agent
-
-#### Setup
-First, set your Anthropic API key as an environment variable:
-```bash
+```sh
+# For Claude
 export ANTHROPIC_API_KEY=your_api_key_here
+
+# For OpenAI
+export OPENAI_API_KEY=your_api_key_here
+
+# For Google
+export GOOGLE_API_KEY=your_api_key_here
+
+# For DeepSeek
+export DEEPSEEK_API_KEY=your_api_key_here
 ```
 
-#### Start the Code Agent
-Launch the interactive code agent:
-```bash
-mdrs code
+## Usage
+
+### Markdown Generation
+
+Generate a markdown file from code files:
+
+```sh
+# Basic usage with default settings (uses current directory and outputs to llm.md)
+pai md
+
+# Specify input directory and output file
+pai md --input-dir /path/to/project --output documentation.md
+
+# Filter by specific file extensions
+pai md --extensions rs,toml,md
+
+# Ignore specific files or patterns
+pai md --ignore "target,.git,Cargo.lock"
 ```
 
-#### Examples of Code Agent Use
-Once the agent is running, you can interact with it through natural language:
+#### Options
 
-- **Read a file**: "What's in src/main.rs?"
-- **List files**: "What files are in the src directory?"
-- **Edit a file**: "Update main.rs to add better error handling"
-- **Create a new file**: "Create a new file called utils.rs with a function to parse JSON"
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--input-dir`, `-i` | Directory to scan | Current directory (.) |
+| `--output`, `-o` | Output markdown file path | `llm.md` |
+| `--extensions`, `-e` | Comma-separated file extensions to include | All files |
+| `--ignore` | Comma-separated files or patterns to ignore | None |
 
-## 📋 Command Line Arguments
+### Code Generation Agent
 
-| Argument | Short | Long | Description | Default |
-|----------|-------|------|-------------|---------|
-| `input_dir` | - | - | Directory to scan or 'code' to run the code agent | Current directory (.) |
-| `output` | `-o` | `--output` | Output markdown file path (for markdown generator) | llm.md |
-| `extensions` | `-e` | `--extensions` | Comma-separated file extensions to include | None (all files) |
-| `ignore` | `-i` | `--ignore` | Comma-separated files or extensions to ignore | None |
+Run the code generation agent:
 
-## 🔍 File Filtering (Markdown Generator)
+```sh
+# Run with default model (usually Claude)
+pai code
 
-The tool automatically:
-- Skips binary files (images, executables, etc.)
-- Skips hidden files and directories (starting with `.`)
-- Skips common build and dependency directories:
-  - `target`, `build`, `dist`
-  - `node_modules`, `.git`, `.venv`
-  - `__pycache__`, `.pytest_cache`
-  - `.idea`, `.vscode`
-  - `.next`, `.nuxt`, `.docusaurus`
-  - `.cargo`, `.rustup`
+# Specify a particular model
+pai code --model claude
+pai code --model openai
+pai code --model google
+pai code --model deepseek
 
-## 📄 Markdown Output Format
-
-The generated markdown file will have the following format for each file:
-
-```markdown
-filename.py
-```
-[file content]
+# Specify both model and working directory
+pai code --model claude --dir /path/to/project
 ```
 
-foldername/new.py
-```
-[file content]
-```
-```
+#### Options
 
-## 🤖 Code Agent Capabilities
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--model`, `-m` | LLM model to use (claude, openai, google, deepseek) | `claude` |
+| `--dir`, `-d` | Working directory | Current directory |
+| `--temperature` | Model temperature (randomness) | Model-specific default |
 
-The code agent provides three main tools:
+#### Example Interactions
 
-1. **read_file**: Reads the contents of a file
-2. **list_files**: Lists all files in a directory
-3. **edit_file**: Makes edits to a file or creates new files
+Once the agent is running, you can interact with it using natural language:
 
-The agent uses Claude AI to understand your instructions in natural language and perform the appropriate actions on your codebase.
+- "What files are in the src directory?"
+- "Show me the content of main.rs"
+- "Create a new file called utils.rs with a function to parse JSON"
+- "Add error handling to the API request in network.rs"
 
-## 🤝 Contributing
+## Dependencies
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+This project uses the following key Rust libraries:
 
-## 📄 License
+- `walkdir`: Directory traversal
+- `clap`: Command-line argument parsing
+- `anyhow`: Error handling
+- `reqwest`: HTTP client for API requests
+- `tokio`: Asynchronous runtime
+- `serde`: Serialization/deserialization
+- `async-trait`: Async trait support
+- `chrono`: Date and time functionality
+- `uuid`: UUID generation
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+## License
 
-## 🙏 Acknowledgments
+This project is licensed under the MIT License.
 
-- [walkdir](https://github.com/BurntSushi/walkdir) for efficient directory traversal
-- [clap](https://github.com/clap-rs/clap) for command-line argument parsing
-- [anyhow](https://github.com/dtolnay/anyhow) for error handling
-- [Anthropic](https://www.anthropic.com/) for Claude AI capabilities
-- [reqwest](https://github.com/seanmonstar/reqwest) for HTTP requests
-- [tokio](https://github.com/tokio-rs/tokio) for async runtime
-- [serde](https://github.com/serde-rs/serde) for serialization/deserialization 
+## Author
+
+Farhan Ali Raza <farhanalirazaazeemi@gmail.com>
