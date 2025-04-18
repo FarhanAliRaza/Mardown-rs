@@ -2,6 +2,9 @@ pub mod code;
 pub mod md;
 pub mod models;
 
+#[cfg(test)]
+mod code_tests;
+
 use clap::{Parser, Subcommand};
 use code::Agent;
 use md::{MdrsArgs, generate_markdown};

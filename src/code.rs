@@ -1,5 +1,6 @@
 use serde_json::Value;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::fs;
 use std::io::{self, BufRead, Write};
 use std::path::Path;
@@ -13,7 +14,8 @@ use crate::models::{
     ToolSchemaProperty,
 };
 
-type Result<T> = std::result::Result<T, AppError>;
+// Make the type alias crate-public so tests can access it
+pub(crate) type Result<T> = std::result::Result<T, AppError>;
 
 type ToolFunction = fn(Value) -> Result<String>;
 
@@ -51,16 +53,17 @@ impl Agent {
 
         println!("Initialized Agent with {} model.", model.name());
 
-        // Load system prompt
-        let system_prompt = fs::read_to_string("src/system_prompt.txt")
-            .map_err(|e| AppError(format!("Failed to load system prompt: {}", e)))?;
+        // Load system prompt by embedding it at compile time
+        let system_prompt: String = include_str!("system_prompt.txt").to_string();
 
         Ok(Agent {
             model,
             tools: vec![
                 read_file_definition(),
                 list_files_definition(),
-                edit_file_definition(),
+                replace_block_verified_definition(),
+                create_file_definition(),
+                delete_file_definition(),
             ],
             system_prompt,
         })
@@ -270,7 +273,7 @@ fn read_file_definition() -> ToolDefinition {
     }
 }
 
-fn read_file_function(input: Value) -> Result<String> {
+pub(crate) fn read_file_function(input: Value) -> Result<String> {
     let path = input
         .get("path")
         .and_then(|v| v.as_str())
@@ -301,7 +304,7 @@ fn list_files_definition() -> ToolDefinition {
     }
 }
 
-fn list_files_function(input: Value) -> Result<String> {
+pub(crate) fn list_files_function(input: Value) -> Result<String> {
     let start_path_str = input
         .get("path")
         .and_then(|v| v.as_str())
@@ -309,6 +312,15 @@ fn list_files_function(input: Value) -> Result<String> {
         .filter(|s| !s.is_empty())
         .unwrap_or(".");
     let start_path = Path::new(start_path_str);
+
+    if !start_path.exists() {
+        // Return a user-friendly message instead of an error
+        return Ok(serde_json::to_string(&format!(
+            "No such folder or file found: {}",
+            start_path.display()
+        ))
+        .unwrap_or_else(|_| format!("No such folder or file found: {}", start_path.display())));
+    }
 
     let mut files = Vec::new();
 
@@ -319,7 +331,7 @@ fn list_files_function(input: Value) -> Result<String> {
 }
 
 // Helper function adapted from md.rs to check if a path should be skipped by tools
-fn should_skip_tool_path(path: &Path) -> bool {
+pub(crate) fn should_skip_tool_path(path: &Path) -> bool {
     const SKIP_DIRS: &[&str] = &[
         "target",
         "build",
@@ -336,28 +348,30 @@ fn should_skip_tool_path(path: &Path) -> bool {
         ".docusaurus",
         ".cargo",
         ".rustup",
-        // Add other common build/dependency directories if needed
     ];
-
-    // Define specific dotfiles/dotdirs to skip
-    const SKIP_DOTFILES: &[&str] = &[
-        ".git",
-        ".env",
-        ".DS_Store", // Example common dotfile
-                     // Add other specific dotfiles/dotdirs to skip
-    ];
+    const SKIP_DOTFILES: &[&str] = &[".git", ".env", ".DS_Store"];
+    const ALLOW_DOTDIRS: &[&str] = &[".github"];
 
     path.components().any(|component| {
+        // Ignore the current directory component (".") during checks
+        if component.as_os_str() == "." {
+            return false;
+        }
+
         if let Some(name) = component.as_os_str().to_str() {
-            // Skip if it's a specific dotfile/dotdir OR in the general skip list
-            SKIP_DOTFILES.contains(&name) || SKIP_DIRS.contains(&name)
+            let is_specifically_skipped =
+                SKIP_DOTFILES.contains(&name) || SKIP_DIRS.contains(&name);
+            let is_generally_hidden_and_not_allowed =
+                name.starts_with('.') && !ALLOW_DOTDIRS.contains(&name);
+
+            is_specifically_skipped || is_generally_hidden_and_not_allowed
         } else {
-            false // Ignore non-UTF8 components if any
+            false // Ignore non-UTF8 components
         }
     })
 }
 
-fn visit_dirs_recursive(
+pub(crate) fn visit_dirs_recursive(
     current_path: &Path,
     base_path: &Path,
     files: &mut Vec<String>,
@@ -419,55 +433,113 @@ fn visit_dirs_recursive(
     Ok(())
 }
 
-fn edit_file_definition() -> ToolDefinition {
+fn replace_block_verified_definition() -> ToolDefinition {
     let mut properties = HashMap::new();
     properties.insert(
         "path".to_string(),
         ToolSchemaProperty {
             property_type: "string".to_string(),
-            description: "The relative path to the file to write or create.".to_string(),
+            description: "The relative path to the file to modify.".to_string(),
         },
     );
     properties.insert(
-        "content".to_string(),
+        "start_marker".to_string(),
         ToolSchemaProperty {
             property_type: "string".to_string(),
-            description: "The full new content for the file. If the file exists, its entire content will be replaced. If it doesn't exist, it will be created with this content.".to_string(),
+            description: "A unique string from the original file content that immediately precedes the block to be replaced.".to_string(),
         },
     );
-    let required = vec!["path".to_string(), "content".to_string()];
+    properties.insert(
+        "end_marker".to_string(),
+        ToolSchemaProperty {
+            property_type: "string".to_string(),
+            description: "A unique string from the original file content that immediately follows the block to be replaced.".to_string(),
+        },
+    );
+    properties.insert(
+        "pre_context".to_string(),
+        ToolSchemaProperty {
+            property_type: "string".to_string(),
+            description: "A short snippet (e.g., 1-2 lines) of the expected original file content immediately preceding the start_marker for verification.".to_string(),
+        },
+    );
+    properties.insert(
+        "post_context".to_string(),
+        ToolSchemaProperty {
+            property_type: "string".to_string(),
+            description: "A short snippet (e.g., 1-2 lines) of the expected original file content immediately following the end_marker for verification.".to_string(),
+        },
+    );
+    properties.insert(
+        "new_content".to_string(),
+        ToolSchemaProperty {
+            property_type: "string".to_string(),
+            description: "The full new content for the code block.".to_string(),
+        },
+    );
+    let required = vec![
+        "path".to_string(),
+        "start_marker".to_string(),
+        "end_marker".to_string(),
+        "pre_context".to_string(),
+        "post_context".to_string(),
+        "new_content".to_string(),
+    ];
 
     ToolDefinition {
-        name: "edit_file".to_string(),
-        description: "Writes or overwrites a file with the provided content. If the file path doesn't exist, it (and any necessary parent directories) will be created. If the file exists, its content will be completely replaced.".to_string(),
+        name: "replace_block_verified".to_string(),
+        description: "Replaces a block of code identified by unique start/end markers, verifying surrounding context fuzzily before applying. Use this for robust code modification.".to_string(),
         schema: ToolSchema {
             schema_type: "object".to_string(),
             properties,
             required: Some(required),
         },
-        function: write_or_create_file_function,
+        function: replace_block_verified_function,
     }
 }
 
-fn write_or_create_file_function(input: Value) -> Result<String> {
+pub(crate) fn replace_block_verified_function(input: Value) -> Result<String> {
     let path_str = input
         .get("path")
         .and_then(|v| v.as_str())
         .map(|s| s.trim())
         .filter(|s| !s.is_empty())
-        .ok_or_else(|| {
-            AppError("Missing or empty required 'path' parameter for edit_file".to_string())
-        })?;
+        .ok_or_else(|| AppError("Missing or empty required 'path' parameter".to_string()))?;
 
-    let content = input
-        .get("content")
+    let start_marker = input
+        .get("start_marker")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| {
-            AppError("Missing required 'content' parameter for edit_file".to_string())
-        })?;
+        .ok_or_else(|| AppError("Missing required 'start_marker' parameter".to_string()))?;
+
+    let end_marker = input
+        .get("end_marker")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| AppError("Missing required 'end_marker' parameter".to_string()))?;
+
+    let pre_context = input
+        .get("pre_context")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| AppError("Missing required 'pre_context' parameter".to_string()))?;
+
+    let post_context = input
+        .get("post_context")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| AppError("Missing required 'post_context' parameter".to_string()))?;
+
+    let new_content = input
+        .get("new_content")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| AppError("Missing required 'new_content' parameter".to_string()))?;
+
+    if start_marker.is_empty() || end_marker.is_empty() {
+        return Err(AppError(
+            "Start and end markers cannot be empty.".to_string(),
+        ));
+    }
 
     let path = Path::new(path_str);
 
+    // Parent directory check
     if let Some(parent) = path.parent() {
         if !parent.as_os_str().is_empty() {
             if !parent.exists() {
@@ -480,59 +552,289 @@ fn write_or_create_file_function(input: Value) -> Result<String> {
                 })?;
             } else if !parent.is_dir() {
                 return Err(AppError(format!(
-                    "Cannot create directory because path '{}' exists and is not a directory.",
+                    "Path '{}' exists and is not a directory.",
                     parent.display()
                 )));
             }
         }
     }
 
-    fs::write(path, content).map_err(|e| {
+    // Read the original file content
+    let original_content = fs::read_to_string(path)
+        .map_err(|e| AppError(format!("Failed to read file '{}': {}", path.display(), e)))?;
+
+    // --- Step 1: Find Exact Markers ---
+    let start_match: Vec<_> = original_content.match_indices(start_marker).collect();
+    if start_match.is_empty() {
+        return Err(AppError(format!(
+            "Start marker not found: {:?}",
+            start_marker
+        )));
+    }
+    if start_match.len() > 1 {
+        return Err(AppError(format!(
+            "Start marker not unique ({} matches): {:?}",
+            start_match.len(),
+            start_marker
+        )));
+    }
+    let marker_start_byte_index = start_match[0].0;
+    let content_start_byte_index = marker_start_byte_index + start_marker.len(); // Index *after* the start marker
+
+    let search_area = &original_content[content_start_byte_index..];
+    // Find ALL matches for the end marker in the search area
+    let end_matches: Vec<_> = search_area.match_indices(end_marker).collect();
+    if end_matches.is_empty() {
+        return Err(AppError(format!(
+            "End marker not found after start marker: {:?}",
+            end_marker
+        )));
+    }
+    // Use the LAST match as the definitive end marker position
+    let last_end_match = end_matches.last().unwrap(); // Safe because we checked is_empty()
+    let content_end_byte_index = content_start_byte_index + last_end_match.0; // Index *before* the last end marker
+    let marker_end_byte_index = content_end_byte_index + end_marker.len(); // Index *after* the last end marker
+
+    if content_start_byte_index > content_end_byte_index {
+        // This check might be necessary if the end marker could somehow precede the start marker
+        // despite the search area starting after the start marker. Or if markers overlap?
+        // Keeping it for safety, though it might be redundant now.
+        return Err(AppError(format!("Start marker appears after end marker.")));
+    }
+
+    // --- Step 2: Verify Context Fuzzily ---
+    // Extract the relevant slices from the original content
+    let actual_content_before_marker = &original_content[..marker_start_byte_index];
+    let actual_content_after_marker = &original_content[marker_end_byte_index..];
+
+    // Fuzzy check if the content *before* the start marker *ends with* the pre_context
+    if !fuzzy_ends_with(actual_content_before_marker, pre_context) {
+        return Err(AppError(format!(
+            "Pre-marker context mismatch. Text before marker {:?} did not fuzzily end with expected {:?}",
+            start_marker, pre_context
+        )));
+    }
+
+    // Fuzzy check if the content *after* the end marker *starts with* the post_context
+    if !fuzzy_starts_with(actual_content_after_marker, post_context) {
+        return Err(AppError(format!(
+            "Post-marker context mismatch. Text after marker {:?} did not fuzzily start with expected {:?}",
+            end_marker, post_context
+        )));
+    }
+
+    // --- Step 3: Construct and Write ---
+    let mut result = String::with_capacity(
+        original_content.len() - (content_end_byte_index - content_start_byte_index)
+            + new_content.len(),
+    );
+    result.push_str(&original_content[..content_start_byte_index]);
+    result.push_str(new_content);
+    result.push_str(&original_content[content_end_byte_index..]);
+
+    fs::write(path, result).map_err(|e| {
         AppError(format!(
-            "Failed to write to file '{}': {}",
+            "Failed to write verified replaced content to file '{}': {}",
             path.display(),
             e
         ))
     })?;
 
-    Ok(format!("Successfully wrote content to {}", path_str))
+    Ok(format!(
+        "Successfully replaced block in {} after context verification",
+        path_str
+    ))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*; // Import items from the outer module
-    use std::path::Path;
+// Helper function for fuzzy context matching (check ends_with)
+pub(crate) fn fuzzy_ends_with(actual: &str, expected_suffix: &str) -> bool {
+    if actual.ends_with(expected_suffix) {
+        return true; // Exact match
+    }
+    // Fuzzy: Trim both actual and expected ends
+    let trimmed_actual = actual.trim_end();
+    let trimmed_expected = expected_suffix.trim_end();
+    if trimmed_actual.ends_with(trimmed_expected) {
+        return true;
+    }
+    // Fuzzy: Trim both completely (handles leading/trailing on both)
+    let fully_trimmed_actual = actual.trim();
+    let fully_trimmed_expected = expected_suffix.trim();
+    if !fully_trimmed_expected.is_empty() && fully_trimmed_actual.ends_with(fully_trimmed_expected)
+    {
+        return true;
+    }
+    false
+}
 
-    #[test]
-    fn test_should_skip_tool_path_hidden() {
-        assert!(should_skip_tool_path(Path::new(".git")));
-        assert!(should_skip_tool_path(Path::new(".env")));
-        assert!(should_skip_tool_path(Path::new("src/.hidden_file")));
-        assert!(should_skip_tool_path(Path::new(".config/settings.toml")));
+// Helper function for fuzzy context matching (check starts_with)
+pub(crate) fn fuzzy_starts_with(actual: &str, expected_prefix: &str) -> bool {
+    if actual.starts_with(expected_prefix) {
+        return true; // Exact match
+    }
+    // Fuzzy: Trim both actual and expected starts
+    let trimmed_actual = actual.trim_start();
+    let trimmed_expected = expected_prefix.trim_start();
+    if trimmed_actual.starts_with(trimmed_expected) {
+        return true;
+    }
+    // Fuzzy: Trim both completely (handles leading/trailing on both)
+    let fully_trimmed_actual = actual.trim();
+    let fully_trimmed_expected = expected_prefix.trim();
+    if !fully_trimmed_expected.is_empty()
+        && fully_trimmed_actual.starts_with(fully_trimmed_expected)
+    {
+        return true;
+    }
+    false
+}
+
+// --- Create File Tool ---
+
+fn create_file_definition() -> ToolDefinition {
+    let mut properties = HashMap::new();
+    properties.insert(
+        "path".to_string(),
+        ToolSchemaProperty {
+            property_type: "string".to_string(),
+            description: "The relative path of the file to create.".to_string(),
+        },
+    );
+    properties.insert(
+        "content".to_string(),
+        ToolSchemaProperty {
+            property_type: "string".to_string(),
+            description: "The initial content for the new file.".to_string(),
+        },
+    );
+    let required = vec!["path".to_string(), "content".to_string()];
+
+    ToolDefinition {
+        name: "create_file".to_string(),
+        description: "Creates a new file with the provided content. IMPORTANT: This tool fails if the file already exists.".to_string(),
+        schema: ToolSchema {
+            schema_type: "object".to_string(),
+            properties,
+            required: Some(required),
+        },
+        function: create_file_function,
+    }
+}
+
+pub(crate) fn create_file_function(input: Value) -> Result<String> {
+    let path_str = input
+        .get("path")
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| {
+            AppError("Missing or empty required 'path' parameter for create_file".to_string())
+        })?;
+
+    let content = input
+        .get("content")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| {
+            AppError("Missing required 'content' parameter for create_file".to_string())
+        })?;
+
+    let path = Path::new(path_str);
+
+    // Check if file already exists
+    if path.exists() {
+        return Err(AppError(format!(
+            "Cannot create file because path '{}' already exists.",
+            path.display()
+        )));
     }
 
-    #[test]
-    fn test_should_skip_tool_path_build_dirs() {
-        assert!(should_skip_tool_path(Path::new("target")));
-        assert!(should_skip_tool_path(Path::new("node_modules")));
-        assert!(should_skip_tool_path(Path::new("project/target/debug")));
-        assert!(should_skip_tool_path(Path::new("app/node_modules/package")));
-        assert!(should_skip_tool_path(Path::new("venv/lib/python")));
+    // Ensure parent directory exists
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent).map_err(|e| {
+                AppError(format!(
+                    "Failed to create directory '{}': {}",
+                    parent.display(),
+                    e
+                ))
+            })?;
+            if parent.is_file() {
+                return Err(AppError(format!(
+                    "Cannot create directory because parent path '{}' exists and is a file.",
+                    parent.display()
+                )));
+            }
+        }
     }
 
-    #[test]
-    fn test_should_skip_tool_path_valid() {
-        assert!(!should_skip_tool_path(Path::new("src/main.rs")));
-        assert!(!should_skip_tool_path(Path::new("README.md")));
-        assert!(!should_skip_tool_path(Path::new("scripts/build.sh")));
-        assert!(!should_skip_tool_path(Path::new("docs/api.html")));
-        assert!(!should_skip_tool_path(Path::new(
-            ".github/workflows/ci.yml"
-        ))); // .github is allowed
+    // Write the new file content
+    fs::write(path, content).map_err(|e| {
+        AppError(format!(
+            "Failed to create file '{}' (Error: {}). Does parent directory exist?",
+            path.display(),
+            e
+        ))
+    })?;
+
+    Ok(format!("Successfully created file {}", path_str))
+}
+
+// --- Delete File Tool ---
+
+fn delete_file_definition() -> ToolDefinition {
+    let mut properties = HashMap::new();
+    properties.insert(
+        "path".to_string(),
+        ToolSchemaProperty {
+            property_type: "string".to_string(),
+            description: "The relative path of the file to delete.".to_string(),
+        },
+    );
+    let required = vec!["path".to_string()];
+
+    ToolDefinition {
+        name: "delete_file".to_string(),
+        description: "Deletes the specified file. Fails if the path is a directory or the file does not exist.".to_string(),
+        schema: ToolSchema {
+            schema_type: "object".to_string(),
+            properties,
+            required: Some(required),
+        },
+        function: delete_file_function,
+    }
+}
+
+pub(crate) fn delete_file_function(input: Value) -> Result<String> {
+    let path_str = input
+        .get("path")
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| {
+            AppError("Missing or empty required 'path' parameter for delete_file".to_string())
+        })?;
+
+    let path = Path::new(path_str);
+
+    // Check if path exists
+    if !path.exists() {
+        return Err(AppError(format!(
+            "Cannot delete because path '{}' does not exist.",
+            path.display()
+        )));
     }
 
-    // TODO: Add tests for list_files_function using temp directories
-    // TODO: Add tests for read_file_function using temp files
-    // TODO: Add tests for write_or_create_file_function using temp files
-    // TODO: Add tests for Agent::execute_tool
+    // Check if it's a file (not a directory)
+    if !path.is_file() {
+        return Err(AppError(format!(
+            "Cannot delete because path '{}' is not a file (it might be a directory).",
+            path.display()
+        )));
+    }
+
+    // Delete the file
+    fs::remove_file(path)
+        .map_err(|e| AppError(format!("Failed to delete file '{}': {}", path.display(), e)))?;
+
+    Ok(format!("Successfully deleted file {}", path_str))
 }

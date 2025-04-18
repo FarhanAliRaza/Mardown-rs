@@ -1,4 +1,4 @@
-use super::{AppError, ContentBlock, Message, Model, ModelResponse, Tool, ToolSchema};
+use super::{AppError, ContentBlock, Message, Model, ModelResponse, Tool};
 use async_trait::async_trait;
 use reqwest::{Client, header};
 use serde::{Deserialize, Serialize};
